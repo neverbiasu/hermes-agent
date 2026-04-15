@@ -874,10 +874,22 @@ def list_authenticated_providers(
         seen_slugs.add(hermes_slug)
 
     # --- 3. User-defined endpoints from config ---
+    # Build set of custom provider names to avoid duplicates
+    custom_provider_names = set()
+    if custom_providers and isinstance(custom_providers, list):
+        for entry in custom_providers:
+            if isinstance(entry, dict) and entry.get("name"):
+                custom_provider_names.add(entry["name"].strip())
+
     if user_providers and isinstance(user_providers, dict):
         for ep_name, ep_cfg in user_providers.items():
             if not isinstance(ep_cfg, dict):
                 continue
+            
+            # Skip if this provider is already defined in custom_providers
+            if ep_name in custom_provider_names:
+                continue
+            
             display_name = ep_cfg.get("name", "") or ep_name
             api_url = ep_cfg.get("api", "") or ep_cfg.get("url", "") or ""
             default_model = ep_cfg.get("default_model", "")
@@ -887,7 +899,21 @@ def list_authenticated_providers(
                 models_list.append(default_model)
 
             # Try to probe /v1/models if URL is set (but don't block on it)
-            # For now just show what we know from config
+            if not models_list and api_url:
+                try:
+                    from hermes_cli.models import probe_api_models
+                    api_key = ep_cfg.get("api_key", "")
+                    result = probe_api_models(
+                        api_key=api_key if api_key else None,
+                        base_url=api_url,
+                        timeout=3.0,
+                    )
+                    probed_models = result.get("models")
+                    if probed_models:
+                        models_list = probed_models[:max_models]
+                except Exception as exc:
+                    logger.debug("Model probe failed for %s: %s", ep_name, exc)
+
             results.append({
                 "slug": ep_name,
                 "name": display_name,
@@ -923,6 +949,22 @@ def list_authenticated_providers(
             default_model = (entry.get("model") or "").strip()
             if default_model:
                 models_list.append(default_model)
+
+            # Try to probe /v1/models endpoint if no model is configured
+            if not models_list and api_url:
+                try:
+                    from hermes_cli.models import probe_api_models
+                    api_key = entry.get("api_key", "")
+                    result = probe_api_models(
+                        api_key=api_key if api_key else None,
+                        base_url=api_url,
+                        timeout=3.0,
+                    )
+                    probed_models = result.get("models")
+                    if probed_models:
+                        models_list = probed_models[:max_models]
+                except Exception as exc:
+                    logger.debug("Model probe failed for %s: %s", display_name, exc)
 
             results.append({
                 "slug": slug,
