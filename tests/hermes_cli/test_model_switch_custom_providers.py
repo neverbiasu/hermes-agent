@@ -102,3 +102,35 @@ def test_switch_model_accepts_explicit_named_custom_provider(monkeypatch):
     assert result.new_model == "rotator-openrouter-coding"
     assert result.base_url == "http://127.0.0.1:4141/v1"
     assert result.api_key == "no-key-required"
+
+
+def test_list_authenticated_providers_includes_custom_providers_with_dict_models(monkeypatch):
+    """Custom providers with dict-format models (for context_length) should display model names."""
+    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
+    monkeypatch.setattr(providers_mod, "HERMES_OVERLAYS", {})
+
+    providers = list_authenticated_providers(
+        current_provider="openai-codex",
+        user_providers={},
+        custom_providers=[
+            {
+                "name": "modelscope",
+                "base_url": "https://api.modelscope.cn/v1",
+                "models": {
+                    "qwen2.5:7b": {"context_length": 32768},
+                    "qwen2.5:14b": {"context_length": 65536},
+                    "qwen2.5:72b": {"context_length": 131072},
+                },
+            }
+        ],
+        max_models=50,
+    )
+
+    assert any(
+        p["slug"] == "custom:modelscope"
+        and p["name"] == "modelscope"
+        and set(p["models"]) == {"qwen2.5:7b", "qwen2.5:14b", "qwen2.5:72b"}
+        and p["total_models"] == 3
+        and p["api_url"] == "https://api.modelscope.cn/v1"
+        for p in providers
+    )
