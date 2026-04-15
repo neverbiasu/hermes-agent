@@ -946,8 +946,22 @@ def list_authenticated_providers(
                 continue
 
             models_list = []
+            # 1. 先读取 models 列表字段
+            models_from_config = entry.get("models")
+            if isinstance(models_from_config, list):
+                for m in models_from_config:
+                    if isinstance(m, str) and m.strip():
+                        models_list.append(m.strip())
+            elif isinstance(models_from_config, dict):
+                # 如果 models 是字典格式（用于设置每个模型的 context_length），
+                # 则提取字典的键作为模型名称
+                for m in models_from_config.keys():
+                    if isinstance(m, str) and m.strip():
+                        models_list.append(m.strip())
+
+            # 2. 再读取单个 model 字段（向后兼容）
             default_model = (entry.get("model") or "").strip()
-            if default_model:
+            if default_model and default_model not in models_list:
                 models_list.append(default_model)
 
             # Try to probe /v1/models endpoint if no model is configured
